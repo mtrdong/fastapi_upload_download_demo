@@ -6,6 +6,7 @@ import stat
 from email.utils import formatdate
 from mimetypes import guess_type
 from pathlib import Path
+from urllib.parse import quote
 
 import aiofiles
 from fastapi import Body, FastAPI, File, Path as F_Path, Request, UploadFile
@@ -68,7 +69,7 @@ async def merge_file(
 
 
 @app.get("/file-slice/{file_name}")
-async def download_file(request: Request, file_name: str = F_Path(..., description="文件名称（包含后缀）")):
+async def download_file(request: Request, file_name: str = F_Path(..., description="文件名称（含后缀）")):
     """分片下载文件，支持断点续传"""
     # 检查文件是否存在
     file_path = Path(upload_file_path, file_name)
@@ -93,10 +94,9 @@ async def download_file(request: Request, file_name: str = F_Path(..., descripti
     # 这里 content_length 表示剩余待传输的文件字节长度
     content_length = stat_result.st_size - start_bytes if stat.S_ISREG(stat_result.st_mode) else stat_result.st_size
     # 构建文件名称
-    file_info = file_name.rsplit('.', 1)
-    filename = base64.b64encode(file_info[0].encode()).decode()  # starlette 的 headers 中文编码会报错
-    if len(file_info) == 2:
-        filename += f'.{file_info[1]}'
+    name, *suffix = file_name.rsplit('.', 1)
+    suffix = f'.{suffix[0]}' if suffix else ''
+    filename = quote(f'{name}{suffix}')  # 文件名编码，防止中文名报错
     # 打开文件从起始位置开始分片读取文件
     return StreamingResponse(
         file_iterator(file_path, start_bytes, 1024 * 1024 * 1),  # 每次读取 1M
